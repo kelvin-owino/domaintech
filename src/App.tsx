@@ -40,8 +40,33 @@ export type PageRoute = 'home' | 'services' | 'portfolio' | 'tools' | 'insights'
 
 function parseHashRoute(): { page: PageRoute; subTab?: string } {
   if (typeof window === 'undefined') return { page: 'home' };
-  const rawHash = window.location.hash.replace(/^#\/?/, '').toLowerCase().trim();
   
+  let rawHash = window.location.hash.replace(/^#\/?/, '').toLowerCase().trim();
+  
+  // 1. If hash is empty, check for GitHub Pages SPA 404 redirect param (?p=...)
+  if (!rawHash && window.location.search) {
+    const params = new URLSearchParams(window.location.search);
+    const redirectParam = params.get('p');
+    if (redirectParam) {
+      rawHash = redirectParam.replace(/^\/?/, '').toLowerCase().trim();
+      const cleanPath = redirectParam.startsWith('/') ? redirectParam : '/' + redirectParam;
+      const cleanSearch = window.location.search.replace(/[?&]p=[^&]*/, '').replace(/^[?&]/, '');
+      const newUrl = window.location.pathname + (cleanSearch ? '?' + cleanSearch : '') + '#' + cleanPath;
+      window.history.replaceState(null, '', newUrl);
+    }
+  }
+
+  // 2. If still empty, check if window.location.pathname itself contains a route beyond the subdirectory base
+  if (!rawHash && window.location.pathname) {
+    const segments = window.location.pathname.split('/').filter(Boolean);
+    const knownRoutes = ['services', 'portfolio', 'tools', 'calculator', 'audit', 'domains', 'insights', 'portal', 'faq', 'contact', 'booking', 'about', 'team'];
+    const matchedIndex = segments.findIndex(seg => knownRoutes.includes(seg.toLowerCase()));
+    if (matchedIndex !== -1) {
+      rawHash = segments.slice(matchedIndex).join('/').toLowerCase().trim();
+      window.history.replaceState(null, '', window.location.pathname + '#/' + rawHash);
+    }
+  }
+
   if (!rawHash || rawHash === 'home' || rawHash === 'hero' || rawHash === 'about' || rawHash === 'about-us') {
     return { page: 'home' };
   }
@@ -197,8 +222,14 @@ export default function App() {
       newHash = targetSub ? `#/${targetPage}/${targetSub}` : `#/${targetPage}`;
     }
     
-    if (window.location.hash !== newHash) {
-      window.location.hash = newHash;
+    if (newHash) {
+      if (window.location.hash !== newHash) {
+        window.location.hash = newHash;
+      }
+    } else {
+      if (window.location.hash && window.location.hash !== '#' && window.location.hash !== '#/') {
+        window.history.pushState(null, '', window.location.pathname + window.location.search);
+      }
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
